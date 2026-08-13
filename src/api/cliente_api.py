@@ -13,7 +13,7 @@ Uso:
     cliente = ClienteAPI()
     df_feriados = cliente.obtener_feriados_cr(2021, 2026)
     df_clima = cliente.obtener_clima_historico("2021-01-18", "2026-06-30")
-    
+
 """
 
 import requests
@@ -27,7 +27,7 @@ class ClienteAPI:
     - `_get()`: el mecanismo HTTP compartido (timeout, manejo de errores).
     - `obtener_feriados_cr()` / `obtener_clima_historico()`: el parseo
       especifico de cada fuente, ya que Nager.Date y Open-Meteo devuelven
-      formatos de JSON completamente distintos entre si.
+      formatos de JSON completamente distintos entre si
     """
 
     URL_FERIADOS = "https://date.nager.at/api/v3/PublicHolidays"
