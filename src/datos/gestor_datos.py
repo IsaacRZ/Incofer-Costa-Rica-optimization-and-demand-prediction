@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 
-class LimpiadorARESEP:
+class GestorDatos:
     """Encapsula todo el flujo de carga y limpieza del dataset de ARESEP.
 
     Cada paso del pipeline (cargar, normalizar texto, tratar nulos,
@@ -219,10 +219,10 @@ def main():
     parser.add_argument("--output", required=True, help="Ruta de salida (.parquet o .csv)")
     args = parser.parse_args()
 
-    limpiador = LimpiadorARESEP(args.input)
-    df_limpio = limpiador.ejecutar()
-    limpiador.resumen_calidad()
-    limpiador.guardar(df_limpio, args.output)
+    gestor = GestorDatos(args.input)
+    df_limpio = gestor.ejecutar()
+    gestor.resumen_calidad()
+    gestor.guardar(df_limpio, args.output)
 
 
 if __name__ == "__main__":
