@@ -67,7 +67,7 @@ class GestorDatos:
     def ejecutar(self) -> pd.DataFrame:
         """Corre el pipeline completo y devuelve el dataframe limpio."""
         self.df_crudo = self._cargar()
-        df = self.df_crudo.copy()
+        df = self.df_crudo.copy()   # Copia de df crudo
         df = self._normalizar_texto(df)
         df = self._construir_fecha(df)
         df = self._tratar_nulos(df)
