@@ -13,6 +13,7 @@ Uso:
     cliente = ClienteAPI()
     df_feriados = cliente.obtener_feriados_cr(2021, 2026)
     df_clima = cliente.obtener_clima_historico("2021-01-18", "2026-06-30")
+    
 """
 
 import requests
