@@ -10,18 +10,18 @@ Uso como script:
                                   --output data/processed/viajes_diarios.parquet
 
 Uso como modulo:
-    from src.datos.gestor_datos import LimpiadorARESEP
+    from src.datos.gestor_datos import GestorDatos
 
-    limpiador = LimpiadorARESEP("data/raw/aresep_tren.csv")
-    df_limpio = limpiador.ejecutar()
+    gestor_datos = GestorDatos("data/raw/aresep_tren.csv")
+    df_limpio = gestor_datos.ejecutar()
     limpiador.guardar(df_limpio, "data/processed/viajes_diarios.parquet")
 """
 
-import argparse
-import unicodedata
-from pathlib import Path
+import argparse     # Permite leer argumentos de la consola (--input, --output)
+import unicodedata  # Manipular caracteres unicode -> quitar tildes
+from pathlib import Path # Ruta de un archivo como objeto con métodos útiles (.parent, .suffix, .mkdir())
 
-import pandas as pd
+import pandas as pd 
 
 
 class GestorDatos:
@@ -32,6 +32,7 @@ class GestorDatos:
     o reutilizarlo de forma aislada; `ejecutar()` los encadena en orden.
     """
 
+    # Constantes: Atributos de clase (no cambia entre instancia)
     COLUMNAS_ESPERADAS = {
         "Código de Ruta": "codigo_ruta",
         "Descripción de la ruta": "ruta",
@@ -55,28 +56,30 @@ class GestorDatos:
         "pasajeros_regulares_faltante", "ingresos_faltante",
     ]
 
+    # Constructor 
     def __init__(self, path_csv: str):
-        self.path_csv = Path(path_csv)
-        self.df_crudo: pd.DataFrame | None = None
-        self.df_limpio: pd.DataFrame | None = None
-        self._avisos: list[str] = []
+        self.path_csv = Path(path_csv)  # Conversión a objeto Path 
+        self.df_crudo: pd.DataFrame | None = None   # Fuente original de datos: data/raw/aresep_tren.csv" puede ser pd.DataFrame o None (al inicializarse) 
+        self.df_limpio: pd.DataFrame | None = None  # Retorno del dataframe limpio
+        self._avisos: list[str] = []                # Avisos de errores para resumen de calidad: _atributo_interno 
 
     # ------------------------------------------------------------------
     # Pipeline principal
     # ------------------------------------------------------------------
     def ejecutar(self) -> pd.DataFrame:
-        """Corre el pipeline completo y devuelve el dataframe limpio."""
+        """Corre el pipeline completo y devuelve el dataframe limpio.
+            Cada método privado recibe un dataframe, agrega/modifica columnas."""
         self.df_crudo = self._cargar()
-        df = self.df_crudo.copy()   # Copia de df crudo
+        df = self.df_crudo.copy()   # Copia de df crudo a la variable df para iniciar la cadena de transformación: Pipeline explícito 
         df = self._normalizar_texto(df)
         df = self._construir_fecha(df)
         df = self._tratar_nulos(df)
         df = self._quitar_duplicados(df)
         df = self._derivar_columnas_calendario(df)
         df = self._derivar_pasajeros_totales(df)
-        self.df_limpio = df[self.COLUMNAS_FINALES].sort_values(
-            ["fecha", "codigo_recorrido", "sentido"]
-        ).reset_index(drop=True)
+        self.df_limpio = df[self.COLUMNAS_FINALES].sort_values(     # Method Chaining: Ordena y selecciona las columnas según la lista de columnas finales
+            ["fecha", "codigo_recorrido", "sentido"]                # Ordena las filas según las columnas fecha, codigo_recorrido y sentido.
+        ).reset_index(drop=True)                                    # Reset del index en una secuencia limpia 
         return self.df_limpio
 
     # ------------------------------------------------------------------
@@ -93,7 +96,7 @@ class GestorDatos:
         if not isinstance(texto, str):
             return texto
         try:
-            return texto.encode("latin-1").decode("utf-8")
+            return texto.encode("cp1252").decode("utf-8")
         except (UnicodeEncodeError, UnicodeDecodeError):
             return texto
 
@@ -128,7 +131,7 @@ class GestorDatos:
             return texto
         texto = " ".join(texto.strip().split())
         nfkd = unicodedata.normalize("NFKD", texto)
-        return "".join(c for c in nfkd if not unicodedata.combining(c))
+        return "".join(c for c in nfkd if not unicodedata.combining(c)) # Quitar caracter combinante como: ´ 
 
     def _normalizar_texto(self, df: pd.DataFrame) -> pd.DataFrame:
         for col in ["ruta", "recorrido", "sentido", "codigo_ruta", "codigo_recorrido"]:
@@ -141,12 +144,12 @@ class GestorDatos:
 
     def _construir_fecha(self, df: pd.DataFrame) -> pd.DataFrame:
         df["fecha"] = pd.to_datetime(
-            dict(year=df["anio"], month=df["mes"], day=df["dia"]), errors="coerce"
+            dict(year=df["anio"], month=df["mes"], day=df["dia"]), errors="coerce"  # Diccionario con claves: "year", "month" y "day". "coerce":Convierte a NaT (Not a Time)
         )
-        n_invalidas = df["fecha"].isna().sum()
+        n_invalidas = df["fecha"].isna().sum()  # Sumar fechas invalidas 
         if n_invalidas:
             self._avisos.append(f"{n_invalidas} filas con fecha invalida, descartadas.")
-            df = df.dropna(subset=["fecha"])
+            df = df.dropna(subset=["fecha"])        # Eliminar filas donde "fecha" es nula. 
         return df
 
     def _tratar_nulos(self, df: pd.DataFrame) -> pd.DataFrame:
