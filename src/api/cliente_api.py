@@ -128,9 +128,16 @@ def main():
     print("=== Feriados CR 2021-2022 (muestra corta) ===")
     print(cliente.obtener_feriados_cr(2021, 2022).to_string())
 
-    print("\n=== Clima Enero 2021 (muestra corta) ===")
-    print(cliente.obtener_clima_historico("2021-01-01", "2021-01-10").to_string())
+    print("\n=== Clima Enero San Jose: 2026 (muestra corta) ===")
+    print(cliente.obtener_clima_historico("2026-07-01", "2026-07-31").to_string())
 
+    print("\n=== Clima Enero Cartago: 2026 (muestra corta) ===")
+    clima_cartago = cliente.obtener_clima_historico("2026-07-01", "2026-07-31",9.864, -83.921).to_string()
+    print(clima_cartago)
+
+    print("\n=== Clima Enero Heredia: 2026 (muestra corta) ===")
+    clima_heredia = cliente.obtener_clima_historico("2026-07-01", "2026-07-31",9.9981, -84.1170).to_string()
+    print(clima_heredia)
 
 if __name__ == "__main__":
     main()
