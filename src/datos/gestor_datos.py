@@ -1,16 +1,16 @@
 """
-src/datos/limpieza.py
+src/datos/gestor_datos.py
 
 Clase para cargar y limpiar el CSV crudo de ARESEP (Tren urbano de
 pasajeros), produciendo un dataset tidy a nivel de dia x recorrido x
 sentido, listo para EDA, feature engineering y carga a base de datos.
 
 Uso como script:
-    python src/datos/limpieza.py --input data/raw/aresep_tren.csv \
+    python src/datos/gestor_datos.py --input data/raw/aresep_tren.csv \
                                   --output data/processed/viajes_diarios.parquet
 
 Uso como modulo:
-    from src.datos.limpieza import LimpiadorARESEP
+    from src.datos.gestor_datos import LimpiadorARESEP
 
     limpiador = LimpiadorARESEP("data/raw/aresep_tren.csv")
     df_limpio = limpiador.ejecutar()
@@ -67,7 +67,7 @@ class GestorDatos:
     def ejecutar(self) -> pd.DataFrame:
         """Corre el pipeline completo y devuelve el dataframe limpio."""
         self.df_crudo = self._cargar()
-        df = self.df_crudo.copy()
+        df = self.df_crudo.copy()   # Copia de df crudo
         df = self._normalizar_texto(df)
         df = self._construir_fecha(df)
         df = self._tratar_nulos(df)
