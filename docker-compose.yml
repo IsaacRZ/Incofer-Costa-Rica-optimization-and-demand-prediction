@@ -1,0 +1,15 @@
+services:
+    db:
+        image: timescale/timescaledb:latest-pg16
+        container_name: incofer_timescaledb
+        restart: unless-stopped
+        environment:
+          POSTGRES_USER: incofer
+          POSTGRES_PASSWORD: incofer_dev_password
+          POSTGRES_DB: incofer
+        ports:
+            - "5432:5432"
+        volumes:
+            - incofer_pgdata:/var/lib/postgresql/data
+volumes:
+    incofer_pgdata:
