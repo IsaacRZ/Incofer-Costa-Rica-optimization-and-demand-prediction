@@ -24,6 +24,7 @@ from src.datos.gestor_datos import GestorDatos
 from src.api.cliente_api import ClienteAPI
 from src.helpers.utilidades import Utilidades
 from src.basedatos.gestor_basedatos import GestorBaseDatos
+from src.eda.procesador_eda import ProcesadorEDA
 
 # --- Configuracion del pipeline (ajustar segun el entorno) ---
 RUTA_CSV_CRUDO = "data/raw/aresep_tren.csv"
@@ -79,6 +80,10 @@ def main():
     if gestor_bd.es_postgres:
         gestor_bd.crear_hypertable(NOMBRE_TABLA_DB, columna_fecha="fecha")
     gestor_bd.cerrar()
+
+    # --- 5. EDA ---
+
+
 
     # --- 5-7. TODO: EDA, visualizacion y modelos ---
     # procesador_eda = ProcesadorEDA(df_enriquecido)
