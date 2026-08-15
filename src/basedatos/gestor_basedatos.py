@@ -75,7 +75,7 @@ class GestorBaseDatos:
             conexion.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb;"))
             conexion.execute(text(
                 f"SELECT create_hypertable("
-                f"'{nombre_tabla}', '{columna_fecha}', if_not_exists => TRUE);"
+                f"'{nombre_tabla}', '{columna_fecha}', if_not_exists => TRUE, migrate_data => TRUE);"
             ))
         print(f"'{nombre_tabla}' convertida en hypertable (particionada por '{columna_fecha}').")
 

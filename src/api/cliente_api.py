@@ -13,10 +13,11 @@ Uso:
     cliente = ClienteAPI()
     df_feriados = cliente.obtener_feriados_cr(2021, 2026)
     df_clima = cliente.obtener_clima_historico("2021-01-18", "2026-06-30")
-
 """
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import pandas as pd
 
 
@@ -24,10 +25,11 @@ class ClienteAPI:
     """Cliente generico para las APIs publicas del proyecto.
 
     Internamente separa dos responsabilidades:
-    - `_get()`: el mecanismo HTTP compartido (timeout, manejo de errores).
+    - `_get()`: el mecanismo HTTP compartido (timeout, reintentos, manejo
+      de errores).
     - `obtener_feriados_cr()` / `obtener_clima_historico()`: el parseo
       especifico de cada fuente, ya que Nager.Date y Open-Meteo devuelven
-      formatos de JSON completamente distintos entre si
+      formatos de JSON completamente distintos entre si.
     """
 
     URL_FERIADOS = "https://date.nager.at/api/v3/PublicHolidays"
@@ -44,20 +46,39 @@ class ClienteAPI:
         "precipitation_sum",
     ]
 
-    def __init__(self, timeout_segundos: int = 30):
+    def __init__(self, timeout_segundos: int = 30, reintentos: int = 4):
         self.timeout_segundos = timeout_segundos
         # Cache solo para feriados (se piden por anio, se repiten seguido
         # dentro de una misma sesion de trabajo). El clima se pide una vez
         # por rango completo, asi que no vale la pena cachearlo igual.
         self._cache_feriados: dict[int, list[dict]] = {}
 
+        # Sesion HTTP con reintentos automaticos: una peticion de clima de
+        # varios anios es pesada (miles de dias en una sola respuesta) y es
+        # normal que a veces la conexion se corte a mitad de camino (visto
+        # en la practica: ConnectionResetError durante el handshake SSL).
+        # Sin esto, cualquier caida transitoria de red tumba TODO el
+        # pipeline; con esto, requests reintenta solo automaticamente antes
+        # de rendirse.
+        self._session = requests.Session()
+        reintentar = Retry(
+            total=reintentos,
+            backoff_factor=1.5,  # espera 1.5s, 3s, 6s, 12s... entre intentos
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"],
+        )
+        adaptador = HTTPAdapter(max_retries=reintentar)
+        self._session.mount("https://", adaptador)
+        self._session.mount("http://", adaptador)
+
     # ------------------------------------------------------------------
     # Mecanismo HTTP compartido
     # ------------------------------------------------------------------
     def _get(self, url: str, params: dict | None = None) -> dict | list:
-        """Hace un GET, valida el codigo de respuesta y devuelve el JSON
-        ya parseado (dict o list, segun la forma que tenga la API)."""
-        respuesta = requests.get(url, params=params, timeout=self.timeout_segundos)
+        """Hace un GET (con reintentos automaticos via self._session), valida
+        el codigo de respuesta y devuelve el JSON ya parseado (dict o list,
+        segun la forma que tenga la API)."""
+        respuesta = self._session.get(url, params=params, timeout=self.timeout_segundos)
         respuesta.raise_for_status()
         return respuesta.json()
 
@@ -128,16 +149,9 @@ def main():
     print("=== Feriados CR 2021-2022 (muestra corta) ===")
     print(cliente.obtener_feriados_cr(2021, 2022).to_string())
 
-    print("\n=== Clima Enero San Jose: 2026 (muestra corta) ===")
-    print(cliente.obtener_clima_historico("2026-07-01", "2026-07-31").to_string())
+    print("\n=== Clima Enero 2021 (muestra corta) ===")
+    print(cliente.obtener_clima_historico("2021-01-01", "2021-01-10").to_string())
 
-    print("\n=== Clima Enero Cartago: 2026 (muestra corta) ===")
-    clima_cartago = cliente.obtener_clima_historico("2026-07-01", "2026-07-31",9.864, -83.921).to_string()
-    print(clima_cartago)
-
-    print("\n=== Clima Enero Heredia: 2026 (muestra corta) ===")
-    clima_heredia = cliente.obtener_clima_historico("2026-07-01", "2026-07-31",9.9981, -84.1170).to_string()
-    print(clima_heredia)
 
 if __name__ == "__main__":
     main()
