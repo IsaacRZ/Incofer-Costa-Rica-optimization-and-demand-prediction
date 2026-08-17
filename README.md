@@ -34,6 +34,7 @@ cuenta, lo que permite probarlas por separado.
 ## 1. Instalación
 
 ```bash
+pip install uv 
 git clone <url-del-repo>
 cd Incofer-Costa-Rica-optimization-and-demand-prediction
 uv sync
