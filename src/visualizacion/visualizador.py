@@ -43,18 +43,33 @@ class Visualizador:
         columna_fecha: str = "fecha",
         columna_valor: str = "pasajeros_totales",
         agregacion: str = "sum",
+        ventana_promedio_movil: int = 30,
         titulo: str = "Pasajeros totales por dia",
     ) -> matplotlib.figure.Figure:
         """Linea de tiempo: agrega `columna_valor` por `columna_fecha`
-        (sumando todos los recorridos de cada dia) y la grafica."""
+        (sumando todos los recorridos de cada dia) y la grafica.
+
+        La serie diaria cruda es muy ruidosa (huecos por feriados sin
+        servicio, fines de semana con pocos datos, picos de eventos como
+        la Romeria), lo que hace dificil ver la tendencia real a simple
+        vista. Se agrega una linea de promedio movil (30 dias por defecto)
+        encima, mas gruesa, para que la tendencia de fondo sea legible sin
+        perder la serie original como referencia de fondo.
+        """
         serie = df.groupby(columna_fecha)[columna_valor].agg(agregacion)
+        promedio_movil = serie.rolling(window=ventana_promedio_movil, min_periods=1).mean()
 
         fig, ax = plt.subplots(figsize=self.figsize)
-        ax.plot(serie.index, serie.values, linewidth=0.8)
+        ax.plot(serie.index, serie.values, linewidth=0.5, alpha=0.35,
+                 color="steelblue", label=f"{agregacion} diario")
+        ax.plot(promedio_movil.index, promedio_movil.values, linewidth=2.2,
+                 color="firebrick", label=f"promedio movil {ventana_promedio_movil}d")
         ax.set_title(titulo)
         ax.set_xlabel("Fecha")
         ax.set_ylabel(columna_valor)
+        ax.legend()
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def grafico_demanda_semanal(
@@ -71,6 +86,7 @@ class Visualizador:
         ax.set_ylabel("Pasajeros promedio")
         ax.tick_params(axis="x", rotation=30)
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def grafico_top_rutas(
@@ -81,12 +97,31 @@ class Visualizador:
         """Barras horizontales de la salida de
         ProcesadorEDA.rutas_saturadas() (columnas esperadas:
         recorrido_normalizado, promedio_pasajeros_diarios)."""
-        fig, ax = plt.subplots(figsize=self.figsize)
         datos = df_rutas.sort_values("promedio_pasajeros_diarios")
-        ax.barh(datos["recorrido_normalizado"], datos["promedio_pasajeros_diarios"])
+
+        fig, ax = plt.subplots(figsize=self.figsize)
+        paleta = sns.color_palette("Blues_r", n_colors=len(datos))
+        barras = ax.barh(
+            datos["recorrido_normalizado"],
+            datos["promedio_pasajeros_diarios"],
+            color=paleta,
+        )
+        # Etiqueta con el valor exacto al final de cada barra: mas facil
+        # de leer que solo confiar en el eje X.
+        for barra, valor in zip(barras, datos["promedio_pasajeros_diarios"]):
+            ax.text(
+                barra.get_width() + datos["promedio_pasajeros_diarios"].max() * 0.01,
+                barra.get_y() + barra.get_height() / 2,
+                f"{valor:,.0f}",
+                va="center",
+                fontsize=10,
+            )
         ax.set_title(titulo)
         ax.set_xlabel("Pasajeros promedio diarios")
+        ax.set_xlim(0, datos["promedio_pasajeros_diarios"].max() * 1.15)  # espacio para las etiquetas
+        sns.despine(left=True, bottom=True)
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def heatmap_correlacion(
@@ -100,15 +135,38 @@ class Visualizador:
         sns.heatmap(df_corr, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax)
         ax.set_title(titulo)
         fig.tight_layout()
+        plt.close(fig)
         return fig
 
     def mapa_ciudades_clima(
         self,
         coordenadas: dict[str, tuple[float, float]] | None = None,
+        clima_promedio_por_ciudad: dict[str, dict[str, float]] | None = None,
+        tiles: str = "CartoDB positron",
+        mostrar_corredores: bool = True,
     ) -> folium.Map:
         """Mapa interactivo (punto extra) con las ciudades usadas como
-        referencia climatica en Utilidades.MAPA_RECORRIDO_CIUDAD. Sin
-        argumentos, usa las coordenadas por defecto del GAM."""
+        referencia climatica en Utilidades.MAPA_RECORRIDO_CIUDAD.
+
+        `tiles`: estilo de mapa base. "CartoDB positron" (default) es un
+        estilo minimalista sin la sobrecarga de carreteras/POI de
+        OpenStreetMap estandar, mas apropiado para un mapa tematico de
+        una red ferroviaria especifica. Otras opciones validas de folium:
+        "OpenStreetMap", "CartoDB dark_matter".
+
+        `mostrar_corredores`: dibuja lineas entre San Jose y cada
+        provincia conectada (Heredia, Cartago), representando los
+        corredores interprovinciales reales de INCOFER -- para que el
+        mapa comunique "red ferroviaria", no solo puntos sueltos.
+        NOTA: las lineas conectan los centros de ciudad (aproximacion),
+        no el trazado exacto de la via ferrea, que no tenemos geocodificado.
+
+        Sin `clima_promedio_por_ciudad`, solo marca las ciudades. Si se
+        pasa (ej. df_clima.groupby('ciudad')[['temp_max_c',
+        'precipitacion_mm']].mean().to_dict('index')), colorea cada
+        marcador segun su temperatura promedio (verde=mas fresco,
+        rojo=mas calido) y muestra las cifras en el popup.
+        """
         coordenadas = coordenadas or {
             "San Jose": (9.9325, -84.0795),
             "Heredia": (9.9989, -84.1165),
@@ -117,14 +175,62 @@ class Visualizador:
         lat_centro = sum(lat for lat, _ in coordenadas.values()) / len(coordenadas)
         lon_centro = sum(lon for _, lon in coordenadas.values()) / len(coordenadas)
 
-        mapa = folium.Map(location=[lat_centro, lon_centro], zoom_start=11)
+        mapa = folium.Map(location=[lat_centro, lon_centro], zoom_start=11, tiles=tiles)
+
+        if mostrar_corredores and "San Jose" in coordenadas:
+            hub = coordenadas["San Jose"]
+            for ciudad, coord in coordenadas.items():
+                if ciudad == "San Jose":
+                    continue
+                folium.PolyLine(
+                    locations=[hub, coord],
+                    color="#2c3e50",
+                    weight=3,
+                    opacity=0.6,
+                    tooltip=f"Corredor San Jose - {ciudad}",
+                ).add_to(mapa)
+
+        if clima_promedio_por_ciudad:
+            temperaturas = [v["temp_max_c"] for v in clima_promedio_por_ciudad.values()]
+            temp_min_escala, temp_max_escala = min(temperaturas), max(temperaturas)
+
         for ciudad, (lat, lon) in coordenadas.items():
+            if clima_promedio_por_ciudad and ciudad in clima_promedio_por_ciudad:
+                datos = clima_promedio_por_ciudad[ciudad]
+                temp = datos["temp_max_c"]
+                lluvia = datos.get("precipitacion_mm", None)
+                # Escala simple de color: mas caliente relativo -> rojo/naranja,
+                # mas fresco relativo -> verde/azul.
+                if temp_max_escala == temp_min_escala:
+                    color = "blue"
+                else:
+                    posicion = (temp - temp_min_escala) / (temp_max_escala - temp_min_escala)
+                    color = "red" if posicion > 0.66 else "orange" if posicion > 0.33 else "green"
+                popup_texto = f"{ciudad}<br>Temp. max. promedio: {temp:.1f}°C"
+                if lluvia is not None:
+                    popup_texto += f"<br>Precipitacion promedio: {lluvia:.1f}mm"
+            else:
+                color = "blue"
+                popup_texto = ciudad
+
             folium.Marker(
                 location=[lat, lon],
-                popup=ciudad,
+                popup=popup_texto,
                 tooltip=ciudad,
-                icon=folium.Icon(color="blue", icon="train", prefix="fa"),
+                icon=folium.Icon(color=color, icon="train", prefix="fa"),
             ).add_to(mapa)
+
+        if clima_promedio_por_ciudad and ciudad in clima_promedio_por_ciudad:
+                        folium.Circle(
+                            location=[lat, lon],
+                            radius=6000,  # metros
+                            color=color,
+                            fill=True,
+                            fill_color=color,
+                            fill_opacity=0.25,
+                            opacity=0.5,
+                            tooltip=popup_texto,
+                        ).add_to(mapa)
         return mapa
 
     def guardar(self, figura, ruta_salida: str) -> None:

@@ -76,21 +76,20 @@ class ProcesadorEDA:
             .reset_index(drop=True)
         )
 
-    def rutas_saturadas(self, percentil: float = 0.90) -> pd.DataFrame:
+    def rutas_saturadas(self, top_n: int = 3) -> pd.DataFrame:
         """Identifica los recorridos cuya demanda promedio diaria supera el
         percentil dado, calculado sobre el promedio por recorrido (no sobre
         filas individuales). Es una aproximacion de "saturacion" basada en
         volumen relativo, no en capacidad real del equipo (esa info no esta
         en este dataset -- ver notas del proyecto sobre capacidad por tipo
-        de tren, sacada de los informes PDF de INCOFER)."""
+        de tren, sacada de los informes PDF de INCOFER).
+        Top N recorridos por demanda promedio diaria"""
         promedio_por_ruta = (
             self.df.groupby("recorrido_normalizado")["pasajeros_totales"]
             .mean()
             .sort_values(ascending=False)
         )
-        umbral = promedio_por_ruta.quantile(percentil)
-        saturadas = promedio_por_ruta[promedio_por_ruta >= umbral]
-        return saturadas.reset_index(name="promedio_pasajeros_diarios")
+        return promedio_por_ruta.head(top_n).reset_index(name="promedio_pasajeros_diarios")
  
     def impacto_feriados(self) -> pd.DataFrame:
         """Compara el promedio de pasajeros en dias feriados vs. dias
