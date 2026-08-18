@@ -29,7 +29,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score
 
 
-class ModeloML:
+class modelo_ml:
     """Entrena, compara y optimiza modelos supervisados para INCOFER."""
 
     CAPACIDAD_REFERENCIA_FLOTA = {
@@ -159,7 +159,7 @@ class ModeloML:
     ) -> Dict[str, Dict[str, float]]:
         """Benchmarking con StratifiedKFold CV entre varios clasificadores."""
         cols_num = X.select_dtypes(include=[np.number]).columns.tolist()
-        cols_cat = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+        cols_cat = X.select_dtypes(include=["object", "string", "category", "bool"]).columns.tolist()
 
         preprocessor = ColumnTransformer(
             transformers=[
@@ -195,7 +195,7 @@ class ModeloML:
     ) -> Pipeline:
         """GridSearchCV para optimizar los hiperparámetros del modelo ganador."""
         cols_num = X.select_dtypes(include=[np.number]).columns.tolist()
-        cols_cat = X.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
+        cols_cat = X.select_dtypes(include=["object", "string", "category", "bool"]).columns.tolist()
 
         preprocessor = ColumnTransformer(
             transformers=[
@@ -232,3 +232,53 @@ class ModeloML:
             raise ValueError("No hay modelo entrenado para guardar.")
         joblib.dump(self.mejor_modelo_clasificacion, ruta_salida)
         print(f"Modelo guardado exitosamente en: {ruta_salida}")
+
+if __name__ == "__main__":
+    import os
+
+    print("--- PRUEBA AISLADA DEL MÓDULO DE MACHINE LEARNING ---")
+
+    # 1. Generar datos sintéticos de prueba con la estructura exacta esperada
+    rng = np.random.default_rng(42)
+    n_samples = 300
+
+    fechas = pd.date_range(start="2024-01-01", periods=n_samples, freq="D")
+    recorridos = ["San Jose - Heredia", "San Jose - Cartago", "Heredia - Alajuela"]
+
+    df_demo = pd.DataFrame({
+        "fecha": fechas,
+        "recorrido_normalizado": rng.choice(recorridos, n_samples),
+        "pasajeros_totales": rng.integers(100, 1200, n_samples),
+        "temp_max_c": rng.uniform(18.0, 29.0, n_samples),
+        "precipitacion_mm": rng.uniform(0.0, 25.0, n_samples),
+        "nombre_dia": fechas.day_name(),
+        "dia_semana": fechas.dayofweek,
+        "es_feriado": rng.choice([True, False], n_samples, p=[0.1, 0.9]),
+    })
+
+    # 2. Instanciar la clase y preparar variables
+    ml = modelo_ml(df_demo)
+    df_target = ml.crear_variable_ocupacion()
+
+    # 3. Probar Regresión
+    print("\n--- 1. Evaluando Modelos de Regresión (Demanda Continua) ---")
+    res_reg = ml.comparar_modelos_regresion(df_target)
+    for modelo_nombre, metricas in res_reg.items():
+        print(
+            f"  • {modelo_nombre:18s} -> R²: {metricas['R2']:.3f} | RMSE: {metricas['RMSE']:.2f} | MAE: {metricas['MAE']:.2f}")
+
+    # 4. Probar Clasificación (Pronóstico sin fuga)
+    print("\n--- 2. Evaluando Modelos de Clasificación (Nivel Ocupación) ---")
+    X_b, y_b = ml.preparar_features_pronostico(df_target)
+    res_cls = ml.comparar_modelos_clasificacion(X_b, y_b)
+    for modelo_nombre, metricas in res_cls.items():
+        print(
+            f"  • {modelo_nombre:18s} -> Accuracy CV: {metricas['Accuracy_CV']:.3f} | F1 Weighted CV: {metricas['F1_Weighted_CV']:.3f}")
+
+    # 5. Probar optimización y guardado de modelo
+    print("\n--- 3. Optimizando Hiperparámetros y Exportando Artefacto ---")
+    os.makedirs("data/outputs", exist_ok=True)
+    mejor_modelo = ml.optimizar_mejor_modelo(X_b, y_b, nombre_modelo="RandomForest")
+    ml.guardar_modelo("data/outputs/modelo_clasificacion.joblib")
+
+    print("\n¡Prueba aislada completada con éxito!")
