@@ -65,9 +65,9 @@ class Visualizador:
         sns.barplot(
             data=df_semana,
             x="nombre_dia",
-            y="pasajeros_totales",
-            hue="nombre_dia",  # Misma variable que 'x'
-            legend=False,  # Desactiva la leyenda innecesaria
+            y="promedio",
+            hue="nombre_dia",
+            legend=False,
             palette="Blues_d",
             ax=ax,
         )
@@ -76,25 +76,22 @@ class Visualizador:
         ax.set_xlabel("Día de la Semana", fontsize=10, fontweight="bold")
         ax.set_ylabel("Promedio de Pasajeros", fontsize=10, fontweight="bold")
 
-        # Agregar etiquetas de valor en las barras
         for p in ax.patches:
             height = p.get_height()
             if not pd.isna(height) and height > 0:
                 ax.annotate(
                     f"{int(height):,}",
                     (p.get_x() + p.get_width() / 2.0, height),
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                    xytext=(0, 3),
-                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=9,
+                    xytext=(0, 3), textcoords="offset points",
                 )
 
         plt.tight_layout()
+        plt.close(fig)
         return fig
 
     def grafico_top_rutas(self, df_rutas: pd.DataFrame, top_n: int = 5) -> plt.Figure:
-        """Crea un grafico de barras horizontales para las rutas con mayor saturacion."""
+        """Crea un grafico de barras horizontales para las rutas con mayor demanda."""
         fig, ax = plt.subplots(figsize=(8, 4.5))
 
         df_top = df_rutas.head(top_n)
@@ -102,18 +99,19 @@ class Visualizador:
         sns.barplot(
             data=df_top,
             y="recorrido_normalizado",
-            x="pasajeros_totales",
-            hue="recorrido_normalizado",  # 👈 Misma variable del eje categórico
-            legend=False,  # 👈 Desactiva leyenda
+            x="promedio_pasajeros_diarios",
+            hue="recorrido_normalizado",
+            legend=False,
             palette="Blues_r",
             ax=ax,
         )
 
         ax.set_title(f"Top {top_n} Rutas/Recorridos con Mayor Demanda", fontsize=12, fontweight="bold", pad=12)
-        ax.set_xlabel("Pasajeros Acumulados", fontsize=10, fontweight="bold")
+        ax.set_xlabel("Pasajeros Promedio Diarios", fontsize=10, fontweight="bold")
         ax.set_ylabel("Recorrido", fontsize=10, fontweight="bold")
 
         plt.tight_layout()
+        plt.close(fig)
         return fig
 
     def grafico_matriz_correlacion(self, df_corr: pd.DataFrame) -> plt.Figure:
@@ -133,6 +131,7 @@ class Visualizador:
 
         ax.set_title("Matriz de Correlación: Demanda vs. Clima", fontsize=12, fontweight="bold", pad=12)
         plt.tight_layout()
+        plt.close(fig)
         return fig
 
     def grafico_impacto_clima(self, df_enriquecido: pd.DataFrame) -> plt.Figure:
@@ -157,60 +156,109 @@ class Visualizador:
         plt.tight_layout()
         return fig
 
+    def grafico_serie_temporal(
+        self,
+        df: pd.DataFrame,
+        columna_fecha: str = "fecha",
+        columna_valor: str = "pasajeros_totales",
+        agregacion: str = "sum",
+        ventana_promedio_movil: int = 30,
+        ) -> plt.Figure:
+        """Serie de tiempo con promedio movil (la serie diaria cruda es muy
+        ruidosa por feriados sin servicio y fines de semana con pocos datos,
+        el promedio movil hace legible la tendencia real)."""
+        serie = df.groupby(columna_fecha)[columna_valor].agg(agregacion)
+        promedio_movil = serie.rolling(window=ventana_promedio_movil, min_periods=1).mean()
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(serie.index, serie.values, linewidth=0.5, alpha=0.35,
+                color=self.color_principal, label=f"{agregacion} diario")
+        ax.plot(promedio_movil.index, promedio_movil.values, linewidth=2.2,
+                color=self.color_secundario, label=f"promedio movil {ventana_promedio_movil}d")
+
+        ax.set_title("Pasajeros Totales por Día", fontsize=12, fontweight="bold", pad=12)
+        ax.set_xlabel("Fecha", fontsize=10, fontweight="bold")
+        ax.set_ylabel(columna_valor, fontsize=10, fontweight="bold")
+        ax.legend()
+
+        plt.tight_layout()
+        plt.close(fig)
+        return fig
+
     def mapa_ciudades_clima(
         self,
         coordenadas: Optional[Dict[str, Tuple[float, float]]] = None,
+        clima_promedio_por_ciudad: Optional[Dict[str, Dict[str, float]]] = None,
         centro: Tuple[float, float] = (9.9325, -84.0795),
         zoom: int = 11,
     ) -> folium.Map:
-        """Genera un mapa interactivo con Folium destacando las estaciones principales y rutas.
+        """Mapa interactivo con las 3 ciudades usadas como referencia
+        climatica en Utilidades.MAPA_RECORRIDO_CIUDAD (San Jose, Heredia,
+        Cartago). Alajuela se excluye a proposito: no tiene clima propio
+        en el pipeline, usa Heredia como proxy (ver
+        Utilidades.MAPA_RECORRIDO_CIUDAD), asi que no aporta informacion
+        real mostrarla por separado en un mapa de clima.
 
-        Args:
-            coordenadas: Diccionario con nombres de ciudades y sus pares (lat, lon).
-            centro: Coordenadas del centro del mapa (default: San Jose).
-            zoom: Nivel de zoom inicial.
-
-        Returns:
-            folium.Map: Objeto de mapa interactivo de Folium.
-        """
+        Si se pasa clima_promedio_por_ciudad (ej.
+        df.groupby('ciudad_clima')[['temp_max_c','precipitacion_mm']]
+        .mean().to_dict('index')), colorea cada marcador segun su
+        temperatura promedio (verde=mas fresco, rojo=mas calido) y
+        muestra las cifras en el popup."""
         if coordenadas is None:
             coordenadas = {
-                "Estación Atlántico (San José)": (9.9325, -84.0795),
-                "Estación Heredia": (9.9989, -84.1165),
-                "Estación Cartago": (9.8644, -83.9195),
-                "Estación Alajuela": (10.0162, -84.2116),
+                "San Jose": (9.9325, -84.0795),
+                "Heredia": (9.9989, -84.1165),
+                "Cartago": (9.8644, -83.9195),
             }
 
-        # Mapa base con tema claro y elegante
         mapa = folium.Map(location=list(centro), zoom_start=zoom, tiles="CartoDB positron")
 
-        # 1. Trazar linea de tren aproximada (Corredor Interurbano)
-        puntos_corredor = [
-            coordenadas["Estación Alajuela"],
-            coordenadas["Estación Heredia"],
-            coordenadas["Estación Atlántico (San José)"],
-            coordenadas["Estación Cartago"],
-        ]
-
-        folium.PolyLine(
-            locations=puntos_corredor,
-            color="#003366",
-            weight=4,
-            opacity=0.8,
-            tooltip="Línea de Ferrocarril Interurbano (INCOFER)",
-        ).add_to(mapa)
-
-        # 2. Marcadores personalizados para cada estacion/nodo
-        for nombre, coord in coordenadas.items():
-            folium.Marker(
-                location=list(coord),
-                popup=folium.Popup(f"<b>{nombre}</b><br>Nodo Operativo INCOFER", max_width=200),
-                tooltip=nombre,
-                icon=folium.Icon(color="blue", icon="train", prefix="fa"),
+        if all(c in coordenadas for c in ("Heredia", "San Jose", "Cartago")):
+            folium.PolyLine(
+                locations=[coordenadas["Heredia"], coordenadas["San Jose"], coordenadas["Cartago"]],
+                color="#003366", weight=4, opacity=0.8,
+                tooltip="Corredor Ferroviario INCOFER",
             ).add_to(mapa)
 
-        return mapa;
+        if clima_promedio_por_ciudad:
+            temperaturas = [v["temp_max_c"] for v in clima_promedio_por_ciudad.values()]
+            temp_min_escala, temp_max_escala = min(temperaturas), max(temperaturas)
 
+        for nombre, coord in coordenadas.items():
+            if clima_promedio_por_ciudad and nombre in clima_promedio_por_ciudad:
+                datos = clima_promedio_por_ciudad[nombre]
+                temp = datos["temp_max_c"]
+                lluvia = datos.get("precipitacion_mm")
+                if temp_max_escala == temp_min_escala:
+                    color = "blue"
+                else:
+                    posicion = (temp - temp_min_escala) / (temp_max_escala - temp_min_escala)
+                    color = "red" if posicion > 0.66 else "orange" if posicion > 0.33 else "green"
+                popup_texto = f"<b>{nombre}</b><br>Temp. max. promedio: {temp:.1f}°C"
+                if lluvia is not None:
+                    popup_texto += f"<br>Precipitacion promedio: {lluvia:.1f}mm"
+            else:
+                color = "blue"
+                popup_texto = f"<b>{nombre}</b><br>Nodo Operativo INCOFER"
+
+            folium.Marker(
+                location=list(coord),
+                popup=folium.Popup(popup_texto, max_width=250),
+                tooltip=nombre,
+                icon=folium.Icon(color=color, icon="train", prefix="fa"),
+            ).add_to(mapa)
+
+        return mapa
+
+    def guardar(self, figura, ruta_salida: str) -> None:
+        """Guarda una figura de matplotlib (.png/.pdf) o un mapa de folium
+        (.html) segun el tipo de objeto recibido."""
+        if isinstance(figura, folium.Map):
+            figura.save(ruta_salida)
+        else:
+            figura.savefig(ruta_salida, dpi=150, bbox_inches="tight")
+        print(f"Guardado: {ruta_salida}")
+    
 
 if __name__ == "__main__":
     import os

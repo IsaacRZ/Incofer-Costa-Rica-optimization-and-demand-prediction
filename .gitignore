@@ -3,3 +3,6 @@ prueba_gestor_basedatos.db
 
 # Python cache
 *__pycache*
+
+#Modelos
+*.joblib
