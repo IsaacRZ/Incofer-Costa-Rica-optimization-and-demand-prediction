@@ -1,103 +1,124 @@
-# INCOFER Costa Rica — Optimización y Predicción de Demanda
+# INCOFER Costa Rica — Demand Optimization & Prediction
 
-Proyecto de análisis de datos y machine learning sobre el servicio de tren
-urbano de INCOFER en el Gran Área Metropolitana (GAM) de Costa Rica.
-Combina datos abiertos de ARESEP (pasajeros diarios), feriados oficiales
-(Nager.Date) y clima histórico (Open-Meteo) para explorar patrones de
-demanda y, más adelante, predecirla.
+Data analysis and machine learning project on INCOFER's urban train
+service in Costa Rica's Greater Metropolitan Area (GAM). Combines ARESEP
+open data (daily ridership), official holidays (Nager.Date), and
+historical weather (Open-Meteo) to explore demand patterns and predict
+them.
 
-## Arquitectura
+## Team
 
-Cada módulo de `src/` implementa **una sola clase**, con responsabilidad
-única (patrón POO):
+| Role | Name |
+|---|---|
+| **Tech Lead** | Isaac Rodriguez |
+| Contributor | Byron Perez |
+| Contributor | Jaf420710 |
 
-| Carpeta | Clase | Responsabilidad |
+## Architecture
+
+Each module under `src/` implements **a single class** with a single
+responsibility (OOP pattern):
+
+| Folder | Class | Responsibility |
 |---|---|---|
-| `src/datos/` | `GestorDatos` | Carga y limpia el CSV crudo de ARESEP |
-| `src/api/` | `ClienteAPI` | Descarga feriados CR y clima histórico (Nager.Date, Open-Meteo) |
-| `src/helpers/` | `Utilidades` | Une viajes + feriados + clima; validaciones y formateo |
-| `src/basedatos/` | `GestorBaseDatos` | Conecta y opera contra SQLite o PostgreSQL/TimescaleDB (SQLAlchemy) |
-| `src/eda/` | `ProcesadorEDA` | Estadísticas descriptivas, correlaciones, detección de outliers |
-| `src/visualizacion/` | `Visualizador` | Gráficos (líneas, barras, heatmap) y mapa interactivo |
-| `src/modelos/` | `ModeloML` | *(en construcción)* Regresión y clasificación de demanda |
+| `src/datos/` | `GestorDatos` | Loads and cleans the raw ARESEP CSV |
+| `src/api/` | `ClienteAPI` | Fetches CR holidays and historical weather (Nager.Date, Open-Meteo) |
+| `src/helpers/` | `Utilidades` | Merges trips + holidays + weather; validation and formatting |
+| `src/basedatos/` | `GestorBaseDatos` | Connects to and operates SQLite or PostgreSQL/TimescaleDB (SQLAlchemy) |
+| `src/eda/` | `ProcesadorEDA` | Descriptive statistics, correlations, outlier detection |
+| `src/visualizacion/` | `Visualizador` | Charts (lines, bars, heatmap) and interactive map |
+| `src/modelos/` | `ModeloML` | Regression (demand forecasting) and classification (occupancy level) |
 
-`main.py` es el único orquestador: instancia cada clase e inyecta las
-dependencias entre ellas — ninguna clase crea instancias de otra por su
-cuenta, lo que permite probarlas por separado.
+`main.py` is the single orchestrator: it instantiates each class and
+injects dependencies between them — no class creates instances of
+another on its own, which keeps every class independently testable.
 
-## Prerrequisitos
+`app.py` is an interactive Streamlit dashboard consuming the same
+classes (EDA, visualizations, and the trained classification model) for
+exploration and live prediction.
 
-- [uv](https://docs.astral.sh/uv/) (gestor de entornos/paquetes de Python)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (para PostgreSQL + TimescaleDB)
-- Conexión a internet (para las APIs de feriados/clima)
+## Prerequisites
 
-## 1. Instalación
+- [uv](https://docs.astral.sh/uv/) (Python environment/package manager)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL + TimescaleDB)
+- Internet connection (for the holidays/weather APIs)
+
+## 1. Installation
 
 ```bash
-git clone <url-del-repo>
+git clone <repo-url>
 cd Incofer-Costa-Rica-optimization-and-demand-prediction
 uv sync
 ```
 
-`uv sync` lee `pyproject.toml` / `uv.lock` y crea el entorno virtual
-(`.venv/`) con todas las dependencias (`pandas`, `sqlalchemy`,
-`psycopg2-binary`, `requests`, `matplotlib`, `seaborn`, `folium`, etc.).
+`uv sync` reads `pyproject.toml` / `uv.lock` and creates the virtual
+environment (`.venv/`) with all dependencies (`pandas`, `sqlalchemy`,
+`psycopg2-binary`, `requests`, `matplotlib`, `seaborn`, `folium`,
+`scikit-learn`, `joblib`, `streamlit`, `streamlit-folium`, etc.).
 
-## 2. Levantar la base de datos (PostgreSQL + TimescaleDB)
+## 2. Start the database (PostgreSQL + TimescaleDB)
 
-El proyecto usa TimescaleDB (extensión de PostgreSQL) por las hypertables,
-apropiadas para el volumen de datos de series de tiempo diarias.
+The project uses TimescaleDB (a PostgreSQL extension) for hypertables,
+suited to the daily time-series volume of this dataset.
 
 ```bash
 docker compose up -d
-docker compose ps      # confirma que "incofer_timescaledb" esta "Up"
+docker compose ps      # confirms "incofer_timescaledb" is "Up"
 ```
 
-Credenciales (definidas en `docker-compose.yml`):
+Credentials (defined in `docker-compose.yml`):
 
-| Campo | Valor |
+| Field | Value |
 |---|---|
 | Host | `localhost` |
-| Puerto | `5432` |
-| Base de datos | `incofer` |
-| Usuario | `incofer` |
-| Contraseña | `incofer_dev_password` |
+| Port | `5432` |
+| Database | `incofer` |
+| User | `incofer` |
+| Password | `incofer_dev_password` |
 
-Para detener el contenedor sin perder los datos: `docker compose stop`.
-Para eliminarlo completamente (incluye el volumen de datos): `docker compose down -v`.
+To stop the container without losing data: `docker compose stop`.
+To remove it completely (including the data volume): `docker compose down -v`.
 
-## 3. Datos de entrada
+## 3. Input data
 
-Descarga el CSV de ARESEP ("Tren urbano de pasajeros") desde
+Download the ARESEP CSV ("Urban Train Passengers") from
 [aresep.go.cr/datos-abiertos/tren-urbano-pasajeros](https://aresep.go.cr/datos-abiertos/tren-urbano-pasajeros/)
-y colócalo en:
+and place it at:
 
 ```
 data/raw/aresep_tren.csv
 ```
 
-> ⚠️ El CSV fuente suele traer problemas de codificación (UTF-8 mal
-> reinterpretado, ej. "Código" → "CÃ³digo") si se edita en Excel antes de
-> guardarlo. `GestorDatos` repara esto automáticamente — no hace falta
-> pre-procesar el archivo, pero si lo editaste manualmente, mejor usa el
-> CSV original descargado directo del portal.
+> ⚠️ The source CSV commonly has encoding issues (UTF-8 misread and
+> re-saved, e.g. "Código" → "CÃ³digo") if it was opened/edited in Excel.
+> `GestorDatos` repairs this automatically — no pre-processing needed,
+> but if you edited the file manually, prefer the original download from
+> the portal.
 
-## 4. Correr el pipeline completo
+## 4. Run the full pipeline
 
 ```bash
 uv run python main.py
 ```
 
-Esto ejecuta, en orden:
+This runs, in order:
 
-1. **`GestorDatos`** limpia el CSV → `data/processed/viajes_diarios.parquet`
-2. **`ClienteAPI`** descarga feriados (2021-2026) y clima diario de San
-   José, Heredia y Cartago
-3. **`Utilidades.enriquecer_viajes`** une todo en un único DataFrame
-4. **`GestorBaseDatos`** carga el resultado a PostgreSQL y lo convierte en
-   hypertable (`create_hypertable`, particionada por `fecha`)
+1. **`GestorDatos`** cleans the CSV → `data/processed/viajes_diarios.parquet`
+2. **`ClienteAPI`** fetches holidays (2021-2026) and daily weather for San
+   José, Heredia, and Cartago
+3. **`Utilidades.enriquecer_viajes`** merges everything into a single
+   enriched DataFrame (saved as the final Parquet)
+4. **`GestorBaseDatos`** loads the result into PostgreSQL and converts it
+   into a hypertable (`create_hypertable`, partitioned by `fecha`)
+5. **`ProcesadorEDA`** prints exploratory statistics (weekly demand, top
+   routes)
+6. **`Visualizador`** generates charts to `data/outputs/`
+7. **`ModeloML`** builds the occupancy target, benchmarks classifiers
+   (Logistic Regression, Decision Tree, Random Forest) with cross-
+   validation, optimizes the winner with `GridSearchCV`, and exports the
+   trained model to `data/outputs/modelo_clasificacion.joblib`
 
-Al terminar deberías ver algo como:
+On success you should see something like:
 
 ```
 --- Resumen de calidad del dataset limpio ---
@@ -105,14 +126,18 @@ Filas: 21,874
 ...
 Cargadas 21,874 filas en la tabla 'viajes_diarios'.
 'viajes_diarios' convertida en hypertable (particionada por 'fecha').
+...
+Mejores hiperparámetros (RandomForest): {...}
+Modelo guardado exitosamente en: data/outputs/modelo_clasificacion.joblib
+🎉 Pipeline ejecutado exitosamente de principio a fin.
 ```
 
-## 5. Verificar los datos (DBeaver)
+## 5. Verify the data (DBeaver)
 
-1. Nueva conexión → **PostgreSQL** (no SQLite) con las credenciales de la
-   sección 2.
+1. New connection → **PostgreSQL** (not SQLite) with the credentials from
+   section 2.
 2. `Test Connection` → `Finish`.
-3. SQL de verificación rápida:
+3. Quick verification SQL:
 
 ```sql
 SELECT COUNT(*) FROM viajes_diarios;
@@ -123,10 +148,10 @@ FROM viajes_diarios
 GROUP BY ciudad_clima;
 ```
 
-## 6. Notebooks (EDA y visualización)
+## 6. Notebooks (EDA and visualization)
 
-Los notebooks en `notebooks/` consumen las clases de `src/` — no
-recalculan nada por su cuenta:
+The notebooks in `notebooks/` consume the `src/` classes — they don't
+recompute anything on their own:
 
 ```python
 from src.basedatos.gestor_basedatos import GestorBaseDatos
@@ -141,32 +166,35 @@ eda = ProcesadorEDA(df)
 viz = Visualizador()
 ```
 
-> 💡 Si el mapa de `Visualizador.mapa_ciudades_clima()` sale en blanco
-> dentro de VS Code, es una limitación del webview de notebooks (bloquea
-> la carga de tiles externas), no un bug del código. Usa
-> `viz.guardar(mapa, "mapa_clima.html")` y ábrelo directo en el navegador.
+> 💡 If `Visualizador.mapa_ciudades_clima()` renders blank inside VS
+> Code, that's a notebook webview limitation (it blocks loading external
+> map tiles), not a code bug. Use `viz.guardar(mapa, "mapa_clima.html")`
+> and open it directly in your browser.
 
-## 7. Siguiente paso: Modelos de Machine Learning
+## 7. Interactive dashboard (Streamlit)
 
-`src/modelos/` (clase `ModeloML`) está pendiente de construir. Cubrirá:
+```bash
+docker compose up -d          # database must be running
+uv run streamlit run app.py
+```
 
-- **Regresión** — predicción del número de pasajeros por día/recorrido
-  (variables: día tipo, recorrido, clima, feriado)
-- **Clasificación** — nivel de ocupación (Baja/Media/Alta/Saturada/Sin
-  servicio), usando `pasajeros_totales` y capacidad estimada por tipo de
-  equipo
+Opens a browser tab with three tabs: exploratory analysis, the
+geographic/weather map, and an occupancy-level prediction form powered
+by the trained model in `data/outputs/modelo_clasificacion.joblib`.
 
-## Estructura del proyecto
+## Project structure
 
 ```
 .
 ├── docker-compose.yml       # PostgreSQL + TimescaleDB
-├── main.py                  # Orquestador del pipeline
+├── main.py                  # Pipeline orchestrator
+├── app.py                   # Streamlit dashboard
 ├── pyproject.toml
 ├── data/
-│   ├── raw/                 # aresep_tren.csv (no versionado)
-│   └── processed/           # viajes_diarios.parquet
-├── notebooks/                # EDA y visualización exploratoria
+│   ├── raw/                 # aresep_tren.csv (not versioned)
+│   ├── processed/           # viajes_diarios.parquet (enriched)
+│   └── outputs/             # charts, exported model
+├── notebooks/                # EDA and exploratory visualization
 └── src/
     ├── datos/gestor_datos.py
     ├── api/cliente_api.py
@@ -174,33 +202,51 @@ viz = Visualizador()
     ├── basedatos/gestor_basedatos.py
     ├── eda/procesador_eda.py
     ├── visualizacion/visualizador.py
-    └── modelos/               # (en construcción)
+    └── modelos/modelo_ml.py
 ```
 
-## Notas de calidad de datos conocidas
+## Known data quality notes
 
-Documentadas en detalle en `notebooks/03_EDA.ipynb`, resumen rápido:
+Documented in detail in `notebooks/03_EDA.ipynb`, quick summary:
 
-- **11 de 51 feriados en día hábil (2021-2026) no tienen servicio
-  registrado** — 4 de ellos en 2021 (posible efecto pandemia, consistente
-  con los informes oficiales de INCOFER de ese año); Navidad/Año Nuevo
-  faltan solo desde 2023 (posible cambio de política operativa reciente).
-- **Fin de semana tiene muestra muy chica** (194 sábados, 97 domingos vs.
-  ~4,300 observaciones por día laboral) — cualquier promedio de
-  sábado/domingo es estadísticamente menos confiable.
-- **1-2 de agosto son outliers reales, no errores**: coinciden con la
-  Romería a la Basílica de los Ángeles (ruta Cartago), que dispara la
-  demanda muy por encima de lo normal cada año.
-- **`adultos_mayores_faltante`** marca qué filas tenían el valor
-  originalmente nulo antes de imputarlo a 0 — útil para no confundir
-  "cero adultos mayores real" con "dato no reportado".
+- **11 of 51 weekday holidays (2021-2026) have no recorded service** — 4
+  of them in 2021 (possible pandemic effect, consistent with INCOFER's
+  own official reports for that year); Christmas/New Year's are missing
+  only from 2023 onward (possible recent operational policy change).
+- **Weekends have a very small sample** (194 Saturdays, 97 Sundays vs.
+  ~4,300 observations per weekday) — any Saturday/Sunday average is
+  statistically less reliable.
+- **August 1-2 are real outliers, not errors**: they coincide with the
+  Romería a la Basílica de los Ángeles pilgrimage (Cartago route), which
+  spikes demand well above normal every year.
+- **`adultos_mayores_faltante`** flags which rows originally had a null
+  value before it was imputed to 0 — useful for not confusing "genuinely
+  zero senior riders" with "data not reported".
+- **Empirical capacity ceiling is computed per route AND per year**
+  (`ModeloML.crear_variable_ocupacion(capacidad_por_anio=True)`), not as
+  a single number across the whole 2021-2026 range — a global percentile
+  would blend the pandemic-recovery years (lower ridership/fleet) with
+  the stabilized post-2023 system, flattening real growth (confirmed
+  with real data: Cartago's empirical ceiling rose from ~1,023 in 2021
+  to ~4,090 in 2023, then stabilized).
+- **Classification accuracy is reported for two variants**: Model A
+  (per the project's literal input spec, including `pasajeros_totales`
+  and `capacidad_diaria_estimada` as features) shows near-100% accuracy
+  because the target is a deterministic function of those same inputs —
+  this is expected and documented, not a modeling error. Model B (no
+  leakage, forecast-only features: calendar, weather, route) gives the
+  honest predictive accuracy and is the one relevant to real-world
+  frequency planning.
 
-## Troubleshooting rápido
+## Quick troubleshooting
 
-| Síntoma | Causa / solución |
+| Symptom | Cause / fix |
 |---|---|
-| `ModuleNotFoundError: No module named 'psycopg2'` | Falta el driver: `uv add psycopg2-binary` |
-| Texto con `Ã³`, `â€“` en columnas/valores | CSV editado en Excel (doble codificación); `GestorDatos` ya lo repara, usa el CSV original si persiste |
-| `sqlalchemy.exc.NotSupportedError: table ... is not empty` en `crear_hypertable` | Falta `migrate_data => true` en el `SELECT create_hypertable(...)` |
-| `ConnectionResetError` al pedir clima | Caída transitoria de red; `ClienteAPI` reintenta automático (4 intentos, backoff exponencial) |
-| Mapa de folium en blanco en VS Code | Limitación del webview; exporta a `.html` y ábrelo en el navegador |
+| `ModuleNotFoundError: No module named 'psycopg2'` | Missing driver: `uv add psycopg2-binary` |
+| `ModuleNotFoundError: No module named 'sklearn'` | `uv add scikit-learn joblib` |
+| Text with `Ã³`, `â€“` in columns/values | CSV edited in Excel (double encoding); `GestorDatos` already repairs it — use the original CSV if it persists |
+| `sqlalchemy.exc.NotSupportedError: table ... is not empty` in `crear_hypertable` | Missing `migrate_data => true` in `SELECT create_hypertable(...)` |
+| `ConnectionResetError` when fetching weather | Transient network drop; `ClienteAPI` retries automatically (4 attempts, exponential backoff) |
+| Folium map blank in VS Code | Webview limitation; export to `.html` and open in a browser |
+| `missing ScriptRunContext` warning | You ran `python app.py` instead of `streamlit run app.py` |
+| Streamlit app shows random/fake data | `app.py` must load data via `GestorBaseDatos` from Postgres — it should **fail loudly** if the DB isn't reachable, never silently fall back to synthetic data |
