@@ -58,18 +58,31 @@ class modelo_ml:
             self,
             percentil_capacidad: float = 0.97,
             umbrales: tuple[float, float, float] = (0.25, 0.60, 0.85),
+            capacidad_por_anio: bool = True,
     ) -> pd.DataFrame:
-        """Calcula 'capacidad_diaria_estimada', 'ocupacion_pct' y 'nivel_ocupacion'."""
+        """Calcula 'capacidad_diaria_estimada', 'ocupacion_pct' y 'nivel_ocupacion'.
+
+        capacidad_por_anio (default True): calcula el percentil de capacidad
+        POR RECORRIDO Y POR ANIO en vez de un solo numero para
+        historico. Un percentil global mezcla los anios de recuperacion
+        pos-pandemia (2021-2022, capacidad/demanda mucho mas baja) con el
+        sistema ya estabilizado (2023+), aplanando el crecimiento real
+        (confirmado con datos reales: capacidad empirica de Cartago paso de
+        ~1,023 en 2021 a ~4,090 en 2023, luego se estabilizo). Usar False
+        para reproducir el comportamiento de percentil global unico.
+        """
         df = self.df.copy()
 
-        # Techo empírico de capacidad por recorrido
-        capacidad_ref = (
-            df.groupby("recorrido_normalizado")["pasajeros_totales"]
-            .quantile(percentil_capacidad)
-            .to_dict()
-        )
+        if capacidad_por_anio:
+            if "anio" not in df.columns:
+                df["anio"] = pd.to_datetime(df["fecha"]).dt.year
+            columnas_grupo = ["recorrido_normalizado", "anio"]
+        else:
+            columnas_grupo = ["recorrido_normalizado"]
 
-        df["capacidad_diaria_estimada"] = df["recorrido_normalizado"].map(capacidad_ref)
+        df["capacidad_diaria_estimada"] = df.groupby(columnas_grupo)["pasajeros_totales"].transform(
+            lambda s: s.quantile(percentil_capacidad)
+        )
         df["ocupacion_pct"] = df["pasajeros_totales"] / df["capacidad_diaria_estimada"]
 
         u1, u2, u3 = umbrales
@@ -81,6 +94,7 @@ class modelo_ml:
         ]
 
         df["nivel_ocupacion"] = np.select(condiciones, self.NIVELES_OCUPACION, default="Media")
+        self._capacidad_por_anio = capacidad_por_anio
         self.df = df
         return df
 
