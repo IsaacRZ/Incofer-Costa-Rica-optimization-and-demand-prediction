@@ -194,7 +194,7 @@ class modelo_ml:
         for nombre, model in modelos.items():
             pipeline = Pipeline([("prep", preprocessor), ("mod", model)])
             cv_results = cross_validate(
-                pipeline, X, y, cv=skf, scoring=["accuracy", "f1_weighted"]
+                pipeline, X, y, cv=skf, scoring=["accuracy", "f1_weighted"], n_jobs=-1   
             )
 
             acc_mean = float(cv_results["test_accuracy"].mean())
@@ -246,6 +246,43 @@ class modelo_ml:
             raise ValueError("No hay modelo entrenado para guardar.")
         joblib.dump(self.mejor_modelo_clasificacion, ruta_salida)
         print(f"Modelo guardado exitosamente en: {ruta_salida}")
+
+    def preparar_features_pronostico_con_historial(
+            self, df: pd.DataFrame, ventana_movil: int = 30
+    ) -> Tuple[pd.DataFrame, pd.Series]:
+        """Modelo B+: igual que preparar_features_pronostico(), pero agrega
+        historial reciente por recorrido: promedio movil de los ultimos
+        `ventana_movil` dias y pasajeros de hace 7 dias (mismo dia de la
+        semana, semana anterior). NO es fuga de datos: solo usa fechas
+        ANTERIORES al dia que se clasifica (via .shift()), nunca el valor
+        del dia actual -- es exactamente la informacion que se tendria
+        disponible en la practica al momento de predecir el dia siguiente.
+
+        La demanda diaria de un mismo recorrido esta fuertemente
+        autocorrelacionada (una semana se parece a la anterior); agregar
+        "cuanta gente uso esta ruta recientemente" tipicamente mejora la
+        accuracy de forma sustancial sobre solo calendario+clima+ruta.
+        """
+        df = df.sort_values(["recorrido_normalizado", "fecha"]).copy()
+
+        grp = df.groupby("recorrido_normalizado")["pasajeros_totales"]
+        df["promedio_movil_historico"] = grp.transform(
+            lambda s: s.shift(1).rolling(ventana_movil, min_periods=5).mean()
+        )
+        df["pasajeros_hace_7d"] = grp.shift(7)
+
+        # Filas sin suficiente historial (inicio de cada recorrido) no se
+        # pueden usar aqui -- se descartan explicitamente en vez de
+        # imputar con un valor inventado.
+        df = df.dropna(subset=["promedio_movil_historico", "pasajeros_hace_7d"])
+
+        cols_cat = ["recorrido_normalizado", "nombre_dia", "es_feriado"]
+        cols_num = ["temp_max_c", "precipitacion_mm", "promedio_movil_historico", "pasajeros_hace_7d"]
+        cols_existentes = [c for c in cols_cat + cols_num if c in df.columns]
+
+        X = df[cols_existentes].copy()
+        y = df["nivel_ocupacion"]
+        return X, y
 
 if __name__ == "__main__":
     import os
