@@ -26,20 +26,16 @@ st.set_page_config(
 # --- Carga de Datos con Caché ---
 @st.cache_data
 def cargar_datos():
-    try:
-        return pd.read_parquet("data/processed/viajes_diarios.parquet")
-    except Exception:
-        # Datos de respaldo en caso de no encontrar el archivo procesado
-        fechas = pd.date_range("2024-01-01", periods=100)
-        return pd.DataFrame({
-            "fecha": fechas,
-            "recorrido_normalizado": np.random.choice(["San Jose - Heredia", "San Jose - Cartago"], 100),
-            "pasajeros_totales": np.random.randint(200, 1000, 100),
-            "temp_max_c": np.random.uniform(20, 28, 100),
-            "precipitacion_mm": np.random.uniform(0, 10, 100),
-            "nombre_dia": fechas.day_name(),
-            "es_feriado": False,
-        })
+    """Carga los datos enriquecidos desde Postgres. Si la base de datos no
+    esta disponible, la app debe fallar de forma visible -- NUNCA se
+    sustituyen datos reales por datos aleatorios/sinteticos como fallback
+    silencioso, ya que eso podria pasar desapercibido y presentar numeros
+    inventados como si fueran reales."""
+    from src.basedatos.gestor_basedatos import GestorBaseDatos
+    gestor = GestorBaseDatos("postgresql+psycopg2://incofer:incofer_dev_password@localhost:5432/incofer")
+    df = gestor.consultar("SELECT * FROM viajes_diarios")
+    gestor.cerrar()
+    return df
 
 
 df = cargar_datos()
