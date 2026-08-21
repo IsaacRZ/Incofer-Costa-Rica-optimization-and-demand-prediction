@@ -78,7 +78,7 @@ class modelo_ml:
                 df["anio"] = pd.to_datetime(df["fecha"]).dt.year
             columnas_grupo = ["recorrido_normalizado", "anio"]
         else:
-            columnas_grupo = ["recorrido_normalizado"]
+            columnas_grupo = ["recorrido_normalizado"]  
 
         df["capacidad_diaria_estimada"] = df.groupby(columnas_grupo)["pasajeros_totales"].transform(
             lambda s: s.quantile(percentil_capacidad)
@@ -105,9 +105,9 @@ class modelo_ml:
             self,
             df: pd.DataFrame,
             col_target: str = "pasajeros_totales",
-            cols_num: Optional[List[str]] = None,
-            cols_cat: Optional[List[str]] = None,
-    ) -> Dict[str, Dict[str, float]]:
+            cols_num: list[str] | None = None,
+            cols_cat: list[str] | None = None,
+    ) -> dict[str, dict[str, float]]:
         """Entrena y evalúa modelos de regresión (LinearRegression, RandomForest, GradientBoosting)."""
         cols_num = cols_num or ["temp_max_c", "precipitacion_mm"]
         cols_cat = cols_cat or ["recorrido_normalizado", "nombre_dia", "es_feriado"]
@@ -158,7 +158,7 @@ class modelo_ml:
     # ------------------------------------------------------------------
     # 3. PROYECTO 1B: CLASIFICACIÓN (Modelo A con fuga vs Modelo B pronóstico)
     # ------------------------------------------------------------------
-    def preparar_features_pronostico(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series]:
+    def preparar_features_pronostico(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         """Modelo B: Pronóstico real usando solo variables exógenas (sin fuga)."""
         cols_cat = ["recorrido_normalizado", "nombre_dia", "es_feriado"]
         cols_num = ["temp_max_c", "precipitacion_mm"]

@@ -30,7 +30,7 @@ from src.visualizacion.visualizador import Visualizador
 from src.modelos.modelo_ml import modelo_ml
 
 # --- Configuración del pipeline ---
-RUTA_CSV_CRUDO = "data/raw/aresep_tren.csv"
+RUTA_CSV_CRUDO = "data/raw/aresep_tren1.csv"
 RUTA_PARQUET_LIMPIO = "data/processed/viajes_diarios.parquet"
 CARPETA_OUTPUTS = "data/outputs"
 
